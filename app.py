@@ -151,7 +151,7 @@ if menu == "Mon Dashboard":
 
     # 2. PROCHAINE SÉANCE
     sous_titre("🎯 Prochaine Séance")
-    st.info("📅 **Demain** : Séance de seuil - 3 x 2000m")
+    st.info("📅 **Demain** : Séance de seuil - 6 x 1000m")
     if st.button("📅 Accéder à mon plan d'entrainement"):
         st.toast("Redirection vers le plan...")
 
