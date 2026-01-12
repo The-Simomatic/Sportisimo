@@ -48,24 +48,23 @@ def logout_user():
     st.rerun()
 
 def login_with_google():
-    # On détecte si on est en local ou en ligne
-    import streamlit as st
-    
-    # URL par défaut pour le local
+    # URL par défaut pour le développement local
     redirect_url = "http://localhost:8501"
     
-    # Si on est sur Streamlit Cloud, on utilise l'URL réelle
-    # Note : 'browser.serverAddress' est une astuce pour récupérer l'URL du site
-    if st.secrets.get("SUPABASE_URL"): # Simple test pour savoir si on est en prod
-         # Remplace bien par TON URL exacte Streamlit Cloud ci-dessous :
+    # On vérifie si on est sur Streamlit Cloud (la plateforme définit souvent cette variable)
+    if os.getenv("STREAMLIT_SERVER_PORT") is None and st.secrets.get("SUPABASE_URL"):
          redirect_url = "https://sportisimo.streamlit.app"
 
-    return supabase.auth.sign_in_with_oauth({
-        "provider": "google",
-        "options": {
-            "redirect_to": redirect_url
-        }
-    })
+    try:
+        return supabase.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {
+                "redirect_to": redirect_url
+            }
+        })
+    except Exception as e:
+        st.error(f"Erreur Supabase : {e}")
+        return None
 # --- 3. FONCTIONS TECHNIQUES STRAVA ---
 def get_new_access_token(refresh_token):
     url = "https://www.strava.com/oauth/token"
