@@ -10,32 +10,40 @@ load_dotenv()
 
 st.set_page_config(page_title="SportiSimo", page_icon="🏃", layout="wide")
 
-# Initialisation Supabase
-url = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
-key = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
-supabase: Client = create_client(url, key)
+# Centralisation des clés (Local via .env ou Cloud via Secrets)
+SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Initialisation Session State
+# --- 🔄 GESTION DE LA SESSION (Crucial pour le retour de Google) ---
 if "user" not in st.session_state:
     st.session_state.user = None
-session = supabase.auth.get_session()
-if session:
-    st.session_state.user = session.user
+
+# Vérification automatique de la session au chargement / retour de Google
+def check_auth_status():
+    try:
+        # On tente de récupérer la session active (via cookie ou URL)
+        res = supabase.auth.get_session()
+        if res and res.user:
+            st.session_state.user = res.user
+    except:
+        pass
+
+check_auth_status()
 
 # --- 2. FONCTIONS AUTHENTIFICATION ---
 def login_user(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        st.session_state.user = res.user
-        st.rerun()
+        if res.user:
+            st.session_state.user = res.user
+            st.rerun()
     except:
         st.error("Identifiants incorrects.")
 
 def signup_user(email, password):
     try:
         res = supabase.auth.sign_up({"email": email, "password": password})
-        # Note: Supabase crée souvent le profil via un Trigger SQL, 
-        # mais on garde l'insert manuel si tu n'as pas de trigger.
         if res.user:
             supabase.table("profiles").insert({"id": res.user.id, "email": email}).execute()
             st.info("Vérifie tes emails pour confirmer l'inscription !")
@@ -48,12 +56,16 @@ def logout_user():
     st.rerun()
 
 def login_with_google():
-    # URL par défaut pour le développement local
-    redirect_url = "http://localhost:8501"
-    
-    # On vérifie si on est sur Streamlit Cloud (la plateforme définit souvent cette variable)
-    if os.getenv("STREAMLIT_SERVER_PORT") is None and st.secrets.get("SUPABASE_URL"):
-         redirect_url = "https://sportisimo.streamlit.app"
+    # Détection si on est sur Streamlit Cloud ou en local
+    # On utilise l'URL de l'app si possible, sinon localhost
+    is_prod = False
+    try:
+        if st.secrets.get("SUPABASE_URL"):
+            is_prod = True
+    except:
+        pass
+
+    redirect_url = "https://sportisimo.streamlit.app" if is_prod else "http://localhost:8501"
 
     try:
         return supabase.auth.sign_in_with_oauth({
@@ -63,8 +75,8 @@ def login_with_google():
             }
         })
     except Exception as e:
-        st.error(f"Erreur Supabase : {e}")
         return None
+
 # --- 3. FONCTIONS TECHNIQUES STRAVA ---
 def get_new_access_token(refresh_token):
     url = "https://www.strava.com/oauth/token"
@@ -100,33 +112,18 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@700&display=swap');
     
-    /* Global - Couleur de fond et police */
     html, body, [data-testid="stWidgetLabel"], .stText, p, span { 
         color: #E5E5E5 !important; 
         font-family: 'Ubuntu', sans-serif; 
     }
 
-    /* --- LE LOGO --- */
-    .logo-container { 
-        text-align: center;
-        margin-top: -50px; 
-        margin-bottom: 20px;
-        font-family: 'Ubuntu', sans-serif;
-    }
+    .logo-container { text-align: center; margin-top: -50px; margin-bottom: 20px; }
     .logo-sport { color: #28A5A8; font-size: 4.5rem; font-weight: 700; }
     .logo-simo { color: #F37B1F; font-size: 4.5rem; font-weight: 700; }
 
-    /* --- TITRES --- */
-    .main-title { 
-        text-align: center;
-        color: #F37B1F !important; 
-        font-size: 2.2rem; 
-        font-weight: 700; 
-        margin-bottom: 30px; 
-    }
+    .main-title { text-align: center; color: #F37B1F !important; font-size: 2.2rem; font-weight: 700; margin-bottom: 30px; }
     .sub-title { color: #28A5A8 !important; font-size: 1.8rem; font-weight: 700; margin-top: 25px; }
 
-    /* --- BOUTONS D'ACTION (Validation et Google) --- */
     div[data-testid="stFormSubmitButton"] > button, 
     div[data-testid="stLinkButton"] > a {
         background-color: #F37B1F !important; 
@@ -143,31 +140,14 @@ st.markdown("""
         text-decoration: none !important;
         transition: 0.3s ease all !important;
     }
-    div[data-testid="stFormSubmitButton"] > button:hover, 
-    div[data-testid="stLinkButton"] > a:hover {
-        background-color: #28A5A8 !important; 
-        transform: translateY(-2px);
-    }
 
-    /* --- STYLE DES ONGLETS (TABS) --- */
-    button[data-baseweb="tab"] {
-        background-color: transparent !important;
-        border: none !important;
-        color: #888 !important;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        color: #F37B1F !important;
-        border-bottom: 3px solid #F37B1F !important;
-    }
+    button[data-baseweb="tab"] { background-color: transparent !important; border: none !important; color: #888 !important; }
+    button[data-baseweb="tab"][aria-selected="true"] { color: #F37B1F !important; border-bottom: 3px solid #F37B1F !important; }
 </style>
 """, unsafe_allow_html=True)
 
 def logo():
-    st.markdown("""
-        <div class='logo-container'>
-            <span class='logo-sport'>Sporti</span><span class='logo-simo'>Simo</span>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div class='logo-container'><span class='logo-sport'>Sporti</span><span class='logo-simo'>Simo</span></div>", unsafe_allow_html=True)
 
 def titre(texte):
     st.markdown(f"<div class='main-title'>{texte}</div>", unsafe_allow_html=True)
@@ -181,14 +161,10 @@ if st.session_state.user is None:
     logo()
     titre("Bienvenue sur SportiSimo")
 
-    # On prépare l'URL Google
     google_url = None
-    try:
-        auth_res = login_with_google()
-        if auth_res:
-            google_url = auth_res.url
-    except Exception as e:
-        st.warning(f"Note : Connexion Google indisponible en local ({e})")
+    auth_res = login_with_google()
+    if auth_res:
+        google_url = auth_res.url
 
     tab1, tab2 = st.tabs(["🔒 Connexion", "📝 Créer un compte"])
 
@@ -199,13 +175,9 @@ if st.session_state.user is None:
             if st.form_submit_button("Se connecter"):
                 login_user(email, pw)
         
-        # BOUTON GOOGLE CONNEXION
         if google_url:
             st.link_button("✨ Se connecter avec Google", google_url)
-        else:
-            st.info("💡 Pour activer Google, configurez l'URL de redirection dans Supabase.")
         
-        # Mot de passe oublié (hors du formulaire pour éviter les conflits)
         if st.button("Mot de passe oublié ?", key="forgot_password"):
             if email:
                 supabase.auth.reset_password_for_email(email)
@@ -221,9 +193,9 @@ if st.session_state.user is None:
                 signup_user(new_email, new_pw)
         
         st.divider()
-        # BOUTON GOOGLE INSCRIPTION
         if google_url:
             st.link_button("✨ S'inscrire avec Google", google_url)
+
 else:
     # --- APPLICATION CONNECTÉE ---
     try:
@@ -249,7 +221,7 @@ else:
         titre("Bienvenue !")
         st.info("Pour commencer, connectez votre compte Strava.")
         if st.button("🔗 Lier mon compte Strava"):
-            # Ici viendra ta logique OAuth Strava
+            # Logique Strava à venir
             pass
     else:
         if menu == "Mon Dashboard":
