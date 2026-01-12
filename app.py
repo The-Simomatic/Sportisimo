@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 # --- 1. CONFIGURATION & CONNEXIONS ---
 load_dotenv()
+
 st.set_page_config(page_title="SportiSimo", page_icon="🏃", layout="wide")
 
 # Centralisation des clés
@@ -14,41 +15,103 @@ SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# --- 🔄 GESTION DE LA SESSION ---
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# --- 🎯 INTERCEPTION DU CODE GOOGLE ---
+# --- 🎯 NOUVEAU : INTERCEPTION DU CODE GOOGLE DANS L'URL ---
+# On vérifie si l'URL contient un paramètre 'code' (retour de Google)
 query_params = st.query_params
 if "code" in query_params and st.session_state.user is None:
+    try:
+        # Supabase échange automatiquement le code contre une session
+        session = supabase.auth.get_session()
+        if session:
+            st.session_state.user = session.user
+            # On nettoie l'URL pour enlever le code une fois connecté
+            st.query_params.clear()
+            st.rerun()
+    except Exception as e:
+        st.error(f"Erreur de synchronisation : {e}")
+
+# Vérification classique au cas où la session existe déjà
+def check_auth_status():
     try:
         session = supabase.auth.get_session()
         if session:
             st.session_state.user = session.user
-            st.query_params.clear()
-            st.rerun()
+            return True
     except:
         pass
+    return False
+
+check_auth_status()
 
 # --- 2. FONCTIONS AUTHENTIFICATION ---
-def login_with_google():
-    # Détection Local vs Prod sans crash
-    is_prod = "sportisimo.streamlit.app" in st.query_params or os.getenv("STREAMLIT_SERVER_PORT") is None
-    redirect_url = "https://sportisimo.streamlit.app" if is_prod else "http://localhost:8501"
-
+def login_user(email, password):
     try:
-        return supabase.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {"redirect_to": redirect_url}
-        })
+        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        if res.user:
+            st.session_state.user = res.user
+            st.rerun()
     except:
-        return None
+        st.error("Identifiants incorrects.")
+
+def signup_user(email, password):
+    try:
+        res = supabase.auth.sign_up({"email": email, "password": password})
+        if res.user:
+            supabase.table("profiles").insert({"id": res.user.id, "email": email}).execute()
+            st.info("Vérifie tes emails pour confirmer l'inscription !")
+    except Exception as e:
+        st.error(f"Erreur : {e}")
 
 def logout_user():
     supabase.auth.sign_out()
     st.session_state.user = None
     st.rerun()
 
-# --- 3. FONCTIONS TECHNIQUES ---
+def login_with_google():
+    # Détection simplifiée Local vs Prod
+    # Si on est en ligne, l'URL contient souvent 'streamlit.app'
+    is_prod = "sportisimo.streamlit.app" in st.query_params or (hasattr(st, "secrets") and len(st.secrets) > 0)
+    
+    redirect_url = "https://sportisimo.streamlit.app" if is_prod else "http://localhost:8501"
+
+    try:
+        return supabase.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {
+                "redirect_to": redirect_url
+            }
+        })
+    except Exception as e:
+        return None
+
+# --- 3. FONCTIONS TECHNIQUES STRAVA ---
+def get_new_access_token(refresh_token):
+    url = "https://www.strava.com/oauth/token"
+    payload = {
+        'client_id': os.getenv("STRAVA_CLIENT_ID"),
+        'client_secret': os.getenv("STRAVA_CLIENT_SECRET"),
+        'refresh_token': refresh_token,
+        'grant_type': 'refresh_token'
+    }
+    try:
+        response = requests.post(url, data=payload)
+        return response.json().get('access_token') if response.status_code == 200 else None
+    except: return None
+
+@st.cache_data(ttl=300)
+def get_strava_data(refresh_token):
+    token = get_new_access_token(refresh_token)
+    if not token: return None
+    headers = {'Authorization': f'Bearer {token}'}
+    try:
+        response = requests.get("https://www.strava.com/api/v3/athlete/activities", headers=headers, params={'per_page': 5})
+        return response.json() if response.status_code == 200 else None
+    except: return None
+
 def formater_allure(secondes_totales):
     if secondes_totales <= 0: return "--:--"
     minutes = int(secondes_totales // 60)
@@ -59,54 +122,130 @@ def formater_allure(secondes_totales):
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@700&display=swap');
-    html, body, [data-testid="stWidgetLabel"], .stText, p, span { color: #E5E5E5 !important; font-family: 'Ubuntu', sans-serif; }
+    
+    html, body, [data-testid="stWidgetLabel"], .stText, p, span { 
+        color: #E5E5E5 !important; 
+        font-family: 'Ubuntu', sans-serif; 
+    }
+
     .logo-container { text-align: center; margin-top: -50px; margin-bottom: 20px; }
     .logo-sport { color: #28A5A8; font-size: 4.5rem; font-weight: 700; }
     .logo-simo { color: #F37B1F; font-size: 4.5rem; font-weight: 700; }
-    .main-title { text-align: center; color: #F37B1F !important; font-size: 2.2rem; font-weight: 700; }
+
+    .main-title { text-align: center; color: #F37B1F !important; font-size: 2.2rem; font-weight: 700; margin-bottom: 30px; }
+    .sub-title { color: #28A5A8 !important; font-size: 1.8rem; font-weight: 700; margin-top: 25px; }
+
+    div[data-testid="stFormSubmitButton"] > button, 
     div[data-testid="stLinkButton"] > a {
-        background-color: #F37B1F !important; color: white !important; border-radius: 10px !important;
-        padding: 10px 30px !important; text-decoration: none !important; display: inline-flex;
+        background-color: #F37B1F !important; 
+        color: white !important; 
+        border-radius: 10px !important; 
+        border: none !important; 
+        font-weight: bold !important; 
+        width: auto !important; 
+        padding: 10px 30px !important;
+        height: 3rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none !important;
+        transition: 0.3s ease all !important;
     }
+
+    button[data-baseweb="tab"] { background-color: transparent !important; border: none !important; color: #888 !important; }
+    button[data-baseweb="tab"][aria-selected="true"] { color: #F37B1F !important; border-bottom: 3px solid #F37B1F !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 5. LOGIQUE D'AFFICHAGE ---
-if st.session_state.user is None:
+def logo():
     st.markdown("<div class='logo-container'><span class='logo-sport'>Sporti</span><span class='logo-simo'>Simo</span></div>", unsafe_allow_html=True)
-    st.markdown("<div class='main-title'>Bienvenue sur SportiSimo</div>", unsafe_allow_html=True)
-    
+
+def titre(texte):
+    st.markdown(f"<div class='main-title'>{texte}</div>", unsafe_allow_html=True)
+
+def sous_titre(texte):
+    st.markdown(f"<div class='sub-title'>{texte}</div>", unsafe_allow_html=True)
+
+# --- 5. LOGIQUE D'AFFICHAGE ---
+
+if st.session_state.user is None:
+    logo()
+    titre("Bienvenue sur SportiSimo")
+
+    google_url = None
     auth_res = login_with_google()
     if auth_res:
-        st.link_button("✨ Se connecter avec Google", auth_res.url)
+        google_url = auth_res.url
+
+    tab1, tab2 = st.tabs(["🔒 Connexion", "📝 Créer un compte"])
+
+    with tab1:
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            pw = st.text_input("Mot de passe", type="password")
+            if st.form_submit_button("Se connecter"):
+                login_user(email, pw)
+        
+        if google_url:
+            st.link_button("✨ Se connecter avec Google", google_url)
+        
+        if st.button("Mot de passe oublié ?", key="forgot_password"):
+            if email:
+                supabase.auth.reset_password_for_email(email)
+                st.success("Lien envoyé !")
+            else:
+                st.warning("Indique ton email.")
+
+    with tab2:
+        with st.form("signup_form"):
+            new_email = st.text_input("Email")
+            new_pw = st.text_input("Mot de passe", type="password")
+            if st.form_submit_button("S'inscrire par Email"):
+                signup_user(new_email, new_pw)
+        
+        st.divider()
+        if google_url:
+            st.link_button("✨ S'inscrire avec Google", google_url)
+
 else:
-    # --- VÉRIFICATION / CRÉATION DU PROFIL ---
-    user_id = st.session_state.user.id
+    # --- APPLICATION CONNECTÉE ---
     try:
-        # On vérifie si la ligne existe dans ta table vide
-        res = supabase.table("profiles").select("*").eq("id", user_id).maybe_single().execute()
-        profile = res.data
+        profile_res = supabase.table("profiles").select("*").eq("id", st.session_state.user.id).single().execute()
+        profile = profile_res.data
+    except:
+        profile = None
 
-        if profile is None:
-            # SI VIDE : On crée la ligne automatiquement
-            new_profile = {"id": user_id, "email": st.session_state.user.email, "vma": 16.0}
-            supabase.table("profiles").insert(new_profile).execute()
-            profile = new_profile
-            st.toast("Profil créé !")
-    except Exception as e:
-        st.error(f"Erreur Profil : {e}")
-        profile = {"vma": 16.0}
+    refresh_token = profile.get("strava_refresh_token") if profile else None
 
-    # --- DASHBOARD ---
     with st.sidebar:
+        logo()
         st.write(f"🏃 {st.session_state.user.email}")
-        if st.button("Déconnexion"): logout_user()
-        vma = st.slider("Ta VMA", 8.0, 22.0, float(profile.get('vma', 16.0)))
+        if st.button("Se déconnecter", key="logout_sidebar"):
+            logout_user()
+        st.divider()
+        menu = st.radio("Navigation", ["Mon Dashboard", "Mon CV Sportif"])
+        st.divider()
+        vma_default = profile.get("vma", 16.0) if profile else 16.0
+        vma = st.slider("Ta VMA (km/h)", 8.0, 22.0, float(vma_default))
 
-    st.title("🏃 Mon Dashboard")
-    st.write("Bienvenue dans ton espace sportif !")
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("70% (EF)", formater_allure((60/(vma*0.7))*60))
-    c2.metric("85% (Seuil)", formater_allure((60/(vma*0.85))*60))
-    c3.metric("100% (VMA)", formater_allure((60/vma)*60))
+    if not refresh_token:
+        titre("Bienvenue !")
+        st.info("Pour commencer, connectez votre compte Strava.")
+        if st.button("🔗 Lier mon compte Strava"):
+            pass
+    else:
+        if menu == "Mon Dashboard":
+            titre("🏃 Tableau de Bord")
+            activities = get_strava_data(refresh_token)
+            if activities:
+                sous_titre("📊 Dernières Séances")
+                for act in activities[:3]:
+                    date_p = datetime.datetime.strptime(act['start_date_local'][:10], "%Y-%m-%d").strftime("%d/%m")
+                    st.info(f"**{act['name']}** | {act['distance']/1000:.2f}km | {date_p}")
+            
+            st.divider()
+            sous_titre("⏱️ Tes Allures")
+            c1, c2, c3 = st.columns(3)
+            with c1: st.metric("70% (EF)", formater_allure((60/(vma*0.7))*60))
+            with c2: st.metric("85% (Seuil)", formater_allure((60/(vma*0.85))*60))
+            with c3: st.metric("100% (VMA)", formater_allure((60/vma)*60))
