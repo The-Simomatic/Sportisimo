@@ -10,7 +10,7 @@ load_dotenv()
 
 st.set_page_config(page_title="SportiSimo", page_icon="🏃", layout="wide")
 
-# Centralisation des clés (Local via .env ou Cloud via Secrets)
+# Centralisation des clés
 SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -19,9 +19,23 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# Fonction de vérification améliorée
+# --- 🎯 NOUVEAU : INTERCEPTION DU CODE GOOGLE DANS L'URL ---
+# On vérifie si l'URL contient un paramètre 'code' (retour de Google)
+query_params = st.query_params
+if "code" in query_params and st.session_state.user is None:
+    try:
+        # Supabase échange automatiquement le code contre une session
+        session = supabase.auth.get_session()
+        if session:
+            st.session_state.user = session.user
+            # On nettoie l'URL pour enlever le code une fois connecté
+            st.query_params.clear()
+            st.rerun()
+    except Exception as e:
+        st.error(f"Erreur de synchronisation : {e}")
+
+# Vérification classique au cas où la session existe déjà
 def check_auth_status():
-    # On vérifie si Supabase a une session active
     try:
         session = supabase.auth.get_session()
         if session:
@@ -29,20 +43,8 @@ def check_auth_status():
             return True
     except:
         pass
-    
-    # ASTUCE : Si on revient de Google, l'URL contient des paramètres
-    # On force une petite pause ou un rafraîchissement interne si nécessaire
-    if "access_token" in st.query_params or "id_token" in st.query_params:
-        try:
-            user = supabase.auth.get_user()
-            if user:
-                st.session_state.user = user
-                return True
-        except:
-            pass
     return False
 
-# On exécute la vérification au tout début du script
 check_auth_status()
 
 # --- 2. FONCTIONS AUTHENTIFICATION ---
@@ -70,15 +72,10 @@ def logout_user():
     st.rerun()
 
 def login_with_google():
-    # Détection si on est sur Streamlit Cloud ou en local
-    # On utilise l'URL de l'app si possible, sinon localhost
-    is_prod = False
-    try:
-        if st.secrets.get("SUPABASE_URL"):
-            is_prod = True
-    except:
-        pass
-
+    # Détection simplifiée Local vs Prod
+    # Si on est en ligne, l'URL contient souvent 'streamlit.app'
+    is_prod = "sportisimo.streamlit.app" in st.query_params or (hasattr(st, "secrets") and len(st.secrets) > 0)
+    
     redirect_url = "https://sportisimo.streamlit.app" if is_prod else "http://localhost:8501"
 
     try:
@@ -235,7 +232,6 @@ else:
         titre("Bienvenue !")
         st.info("Pour commencer, connectez votre compte Strava.")
         if st.button("🔗 Lier mon compte Strava"):
-            # Logique Strava à venir
             pass
     else:
         if menu == "Mon Dashboard":
