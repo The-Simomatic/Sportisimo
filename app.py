@@ -15,20 +15,34 @@ SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- 🔄 GESTION DE LA SESSION (Crucial pour le retour de Google) ---
+# --- 🔄 GESTION DE LA SESSION ---
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# Vérification automatique de la session au chargement / retour de Google
+# Fonction de vérification améliorée
 def check_auth_status():
+    # On vérifie si Supabase a une session active
     try:
-        # On tente de récupérer la session active (via cookie ou URL)
-        res = supabase.auth.get_session()
-        if res and res.user:
-            st.session_state.user = res.user
+        session = supabase.auth.get_session()
+        if session:
+            st.session_state.user = session.user
+            return True
     except:
         pass
+    
+    # ASTUCE : Si on revient de Google, l'URL contient des paramètres
+    # On force une petite pause ou un rafraîchissement interne si nécessaire
+    if "access_token" in st.query_params or "id_token" in st.query_params:
+        try:
+            user = supabase.auth.get_user()
+            if user:
+                st.session_state.user = user
+                return True
+        except:
+            pass
+    return False
 
+# On exécute la vérification au tout début du script
 check_auth_status()
 
 # --- 2. FONCTIONS AUTHENTIFICATION ---
