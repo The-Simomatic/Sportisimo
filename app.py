@@ -99,9 +99,35 @@ def formater_allure(secondes_totales):
 # --- 4. DESIGN CSS ---
 st.markdown("""
 <style>
-    /* ... (garder tes polices et couleurs globales) ... */
+    @import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@700&display=swap');
+    
+    /* Global - Couleur de fond et police */
+    html, body, [data-testid="stWidgetLabel"], .stText, p, span { 
+        color: #E5E5E5 !important; 
+        font-family: 'Ubuntu', sans-serif; 
+    }
 
-    /* 🎯 CIBLER LES BOUTONS POUR QU'ILS NE SOIENT PLUS GÉANTS */
+    /* --- LE LOGO --- */
+    .logo-container { 
+        text-align: center;
+        margin-top: -50px; 
+        margin-bottom: 20px;
+        font-family: 'Ubuntu', sans-serif;
+    }
+    .logo-sport { color: #28A5A8; font-size: 4.5rem; font-weight: 700; }
+    .logo-simo { color: #F37B1F; font-size: 4.5rem; font-weight: 700; }
+
+    /* --- TITRES --- */
+    .main-title { 
+        text-align: center;
+        color: #F37B1F !important; 
+        font-size: 2.2rem; 
+        font-weight: 700; 
+        margin-bottom: 30px; 
+    }
+    .sub-title { color: #28A5A8 !important; font-size: 1.8rem; font-weight: 700; margin-top: 25px; }
+
+    /* --- BOUTONS D'ACTION (Validation et Google) --- */
     div[data-testid="stFormSubmitButton"] > button, 
     div[data-testid="stLinkButton"] > a {
         background-color: #F37B1F !important; 
@@ -109,33 +135,40 @@ st.markdown("""
         border-radius: 10px !important; 
         border: none !important; 
         font-weight: bold !important; 
-        
-        /* Supprimer le 100% pour qu'il soit petit comme l'autre */
         width: auto !important; 
-        padding: 0px 25px !important;
-        
-        height: 2.5rem;
-        display: inline-flex; /* Aligner les boutons côte à côte si besoin */
+        padding: 10px 30px !important;
+        height: 3rem;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         text-decoration: none !important;
         transition: 0.3s ease all !important;
     }
+    div[data-testid="stFormSubmitButton"] > button:hover, 
+    div[data-testid="stLinkButton"] > a:hover {
+        background-color: #28A5A8 !important; 
+        transform: translateY(-2px);
+    }
 
-    /* Ajustement spécifique pour l'icône Google */
-    .google-icon {
-        margin-right: 10px;
-        background: white;
-        border-radius: 50%;
-        padding: 2px;
-        display: flex;
-        align-items: center;
+    /* --- STYLE DES ONGLETS (TABS) --- */
+    button[data-baseweb="tab"] {
+        background-color: transparent !important;
+        border: none !important;
+        color: #888 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #F37B1F !important;
+        border-bottom: 3px solid #F37B1F !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 def logo():
-    st.markdown("<div class='logo-container'><span class='logo-sport'>Sporti</span><span class='logo-simo'>Simo</span></div>", unsafe_allow_html=True)
+    st.markdown("""
+        <div class='logo-container'>
+            <span class='logo-sport'>Sporti</span><span class='logo-simo'>Simo</span>
+        </div>
+    """, unsafe_allow_html=True)
 
 def titre(texte):
     st.markdown(f"<div class='main-title'>{texte}</div>", unsafe_allow_html=True)
@@ -149,12 +182,14 @@ if st.session_state.user is None:
     logo()
     titre("Bienvenue sur SportiSimo")
 
-    # Préparation URL Google
+    # On prépare l'URL Google
+    google_url = None
     try:
-        google_auth = login_with_google()
-        google_url = google_auth.url
-    except:
-        google_url = None
+        auth_res = login_with_google()
+        if auth_res:
+            google_url = auth_res.url
+    except Exception as e:
+        st.warning(f"Note : Connexion Google indisponible en local ({e})")
 
     tab1, tab2 = st.tabs(["🔒 Connexion", "📝 Créer un compte"])
 
@@ -165,10 +200,13 @@ if st.session_state.user is None:
             if st.form_submit_button("Se connecter"):
                 login_user(email, pw)
         
+        # BOUTON GOOGLE CONNEXION
         if google_url:
-            # On retire use_container_width=True pour qu'il soit "petit"
             st.link_button("✨ Se connecter avec Google", google_url)
+        else:
+            st.info("💡 Pour activer Google, configurez l'URL de redirection dans Supabase.")
         
+        # Mot de passe oublié (hors du formulaire pour éviter les conflits)
         if st.button("Mot de passe oublié ?", key="forgot_password"):
             if email:
                 supabase.auth.reset_password_for_email(email)
@@ -184,10 +222,9 @@ if st.session_state.user is None:
                 signup_user(new_email, new_pw)
         
         st.divider()
+        # BOUTON GOOGLE INSCRIPTION
         if google_url:
-            # On retire use_container_width=True pour qu'il soit "petit"
             st.link_button("✨ S'inscrire avec Google", google_url)
-
 else:
     # --- APPLICATION CONNECTÉE ---
     try:
