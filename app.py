@@ -108,7 +108,14 @@ if st.session_state.user is None:
             c1, c2 = st.columns(2)
             with c1:
                 prenom_in = st.text_input("Prénom")
-                date_n_in = st.date_input("Date de naissance", datetime.date(1995, 1, 1))
+                date_n = c1.date_input(
+                "Date de naissance", 
+                value=None,              # Champ vide par défaut
+                min_value=datetime.date(1920, 1, 1), 
+                max_value=datetime.date.today(),
+                format="DD/MM/YYYY",     # Format français
+                help="Sélectionne ta date de naissance"
+                )
             with c2:
                 nom_in = st.text_input("Nom")
                 poids_in = st.number_input("Poids (kg)", 30, 200, 75)
