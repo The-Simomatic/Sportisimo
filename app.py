@@ -128,28 +128,27 @@ if st.session_state.user is None:
                 niveau_in = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Confirmé", "Expert"])
             
             if st.button("Valider l'inscription", use_container_width=True):
-                if not prenom_in or not nom_in:
-                    st.warning("Merci de remplir ton nom et ton prénom.")
-                else:
-                    try:
-                        # On envoie TOUTES les données dans les métadonnées Supabase
-                        res = supabase.auth.sign_up({
-                            "email": new_e, 
-                            "password": new_p,
-                            "options": {"data": {
-                                "prenom": prenom_in, 
-                                "nom": nom_in, 
-                                "date_naissance": str(date_n_in),
-                                "poids": poids_in, 
-                                "sport_pref": sport_in,
-                                "niveau": niveau_in
-                            }}
-                        })
-                        if res.user:
-                            st.success("### 📧 Mail envoyé !")
-                            st.info("Vérifie ta boîte mail pour activer ton compte.")
-                    except Exception as e:
-                        st.error(f"Erreur : {e}")
+    # On vérifie que tous les champs sont remplis
+    if not prenom or not nom or not date_n:
+        st.warning("⚠️ Merci de remplir tous les champs, y compris ta date de naissance.")
+    else:
+        try:
+            res = supabase.auth.sign_up({
+                "email": new_e, 
+                "password": new_p,
+                "options": {"data": {
+                    "prenom": prenom, 
+                    "nom": nom, 
+                    "date_n": str(date_n), # Convertit la date en texte pour Supabase
+                    "poids": poids, 
+                    "niveau": niv, 
+                    "sport": sport
+                }}
+            })
+            if res.user:
+                st.success("📩 Mail envoyé ! Active ton compte pour valider ton profil.")
+        except Exception as e:
+            st.error(f"Erreur : {e}")
 
 else:
     # --- ÉCRAN CONNECTÉ ---
