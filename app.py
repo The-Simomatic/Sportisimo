@@ -103,16 +103,31 @@ if st.session_state.user is None:
             niv = st.select_slider("Niveau", ["Débutant", "Intermédiaire", "Confirmé", "Expert"])
             
             if st.button("S'inscrire", use_container_width=True):
-                try:
-                    res = supabase.auth.sign_up({"email": new_e, "password": new_p})
-                    if res.user:
-                        supabase.table("profiles").insert({
-                            "id": res.user.id, "email": new_e, "nom": nom, "prenom": prenom,
-                            "sexe": sexe, "poids": poids, "date_naissance": str(date_n),
-                            "sport_pref": sport, "niveau": niv, "statut": "gratuit", "vma": 16.0
-                        }).execute()
-                        st.success("Compte créé ! Connecte-toi maintenant.")
-                except Exception as e: st.error(f"Erreur: {e}")
+    try:
+        # On crée d'abord l'utilisateur
+        res = supabase.auth.sign_up({"email": new_e, "password": new_p})
+        
+        if res.user:
+            # On insère les données dans 'profiles'
+            # IMPORTANT: On utilise l'ID que Supabase vient de générer
+            supabase.table("profiles").insert({
+                "id": res.user.id, 
+                "email": new_e, 
+                "nom": nom, 
+                "prenom": prenom,
+                "sexe": sexe, 
+                "poids": poids, 
+                "date_naissance": str(date_n),
+                "sport_pref": sport, 
+                "niveau": niv, 
+                "statut": "gratuit", 
+                "vma": 16.0
+            }).execute()
+            
+            st.success("✅ Compte créé avec succès ! Tu peux maintenant te connecter.")
+            st.balloons() # Un peu de fun pour confirmer !
+    except Exception as e:
+        st.error(f"Erreur lors de la création : {e}")
 
         with tab3:
             g_url = get_google_auth_url()
