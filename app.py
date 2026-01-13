@@ -18,47 +18,53 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 if "user" not in st.session_state:
     st.session_state.user = None
 
-def sync_session():
-    """Vérifie si une session existe ou si on revient d'une authentification OAuth"""
-    try:
-        # 1. On demande à Supabase s'il y a une session active (via jeton dans l'URL ou cookie)
-        res = supabase.auth.get_session()
-        if res and res.user:
-            st.session_state.user = res.user
-            return True
-    except Exception:
-        pass
-    
-    # 2. Sécurité supplémentaire pour Streamlit Cloud : vérification via get_user
+def handle_auth():
+    """Gère l'échange de code Google et la récupération de session"""
+    # Étape A : Si on voit un 'code' dans l'URL (retour de Google)
+    if "code" in st.query_params:
+        try:
+            auth_code = st.query_params.get("code")
+            # C'est ici que la magie opère : on échange le code contre la session
+            res = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
+            if res.user:
+                st.session_state.user = res.user
+                st.query_params.clear() # On nettoie l'URL
+                st.rerun()
+        except Exception as e:
+            st.error(f"Erreur d'échange de code : {e}")
+
+    # Étape B : Si pas de code, on vérifie si une session existe déjà
     if st.session_state.user is None:
         try:
-            user_res = supabase.auth.get_user()
-            if user_res:
-                st.session_state.user = user_res.user
-                return True
+            res = supabase.auth.get_session()
+            if res and res.user:
+                st.session_state.user = res.user
         except:
             pass
-    return False
 
-# On synchronise avant de dessiner quoi que ce soit
-sync_session()
+# Lancement de la vérification au démarrage
+handle_auth()
 
 # --- 2. FONCTIONS D'ACCÈS ---
 def logout_user():
     supabase.auth.sign_out()
     st.session_state.user = None
-    st.query_params.clear() # Nettoie l'URL
+    st.query_params.clear()
     st.rerun()
 
 @st.cache_resource
 def get_google_auth_url():
-    """Génère l'URL Google une seule fois pour éviter le clignotement du bouton"""
+    """Génère l'URL Google pour l'authentification PKCE"""
     is_prod = "sportisimo.streamlit.app" in st.query_params or os.getenv("STREAMLIT_SERVER_PORT") is None
     redirect_url = "https://sportisimo.streamlit.app" if is_prod else "http://localhost:8501"
     
+    # Utilisation du flux PKCE (plus sûr pour Streamlit)
     res = supabase.auth.sign_in_with_oauth({
         "provider": "google",
-        "options": {"redirect_to": redirect_url}
+        "options": {
+            "redirect_to": redirect_url,
+            "skip_browser_redirect": True # Très important pour les boutons Streamlit
+        }
     })
     return res.url if res else None
 
