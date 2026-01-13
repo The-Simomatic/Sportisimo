@@ -98,30 +98,51 @@ if st.session_state.user is None:
                     st.warning("Saisis ton email ci-dessus.")
 
         with tab_reg:
-            st.write("### Inscription")
+            st.write("### Créer ton profil SportiSimo")
+            
+            # Identifiants (Ordre demandé)
             new_e = st.text_input("Email", key="r_email").lower().strip()
             new_p = st.text_input("Mot de passe", type="password", key="r_pass")
             
+            # Organisation en colonnes pour les infos personnelles
             c1, c2 = st.columns(2)
-            prenom_in = c1.text_input("Prénom")
-            nom_in = c2.text_input("Nom")
-            poids_in = c1.number_input("Poids (kg)", 30, 200, 75)
-            sport_in = c2.selectbox("Sport", ["Running", "Cyclisme", "Trail"])
+            with c1:
+                prenom_in = st.text_input("Prénom")
+                date_n_in = st.date_input("Date de naissance", datetime.date(1995, 1, 1))
+            with c2:
+                nom_in = st.text_input("Nom")
+                poids_in = st.number_input("Poids (kg)", 30, 200, 75)
+            
+            # Sport et Niveau
+            c3, c4 = st.columns(2)
+            with c3:
+                sport_in = st.selectbox("Sport favori", ["Running", "Cyclisme", "Trail", "VTT"])
+            with c4:
+                niveau_in = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Confirmé", "Expert"])
             
             if st.button("Valider l'inscription", use_container_width=True):
-                try:
-                    res = supabase.auth.sign_up({
-                        "email": new_e, 
-                        "password": new_p,
-                        "options": {"data": {
-                            "prenom": prenom_in, "nom": nom_in, "poids": poids_in, "sport_pref": sport_in
-                        }}
-                    })
-                    if res.user:
-                        st.success("### 📧 Mail envoyé !")
-                        st.info("Vérifie ta boîte mail pour activer ton compte.")
-                except Exception as e:
-                    st.error(f"Erreur : {e}")
+                if not prenom_in or not nom_in:
+                    st.warning("Merci de remplir ton nom et ton prénom.")
+                else:
+                    try:
+                        # On envoie TOUTES les données dans les métadonnées Supabase
+                        res = supabase.auth.sign_up({
+                            "email": new_e, 
+                            "password": new_p,
+                            "options": {"data": {
+                                "prenom": prenom_in, 
+                                "nom": nom_in, 
+                                "date_naissance": str(date_n_in),
+                                "poids": poids_in, 
+                                "sport_pref": sport_in,
+                                "niveau": niveau_in
+                            }}
+                        })
+                        if res.user:
+                            st.success("### 📧 Mail envoyé !")
+                            st.info("Vérifie ta boîte mail pour activer ton compte.")
+                    except Exception as e:
+                        st.error(f"Erreur : {e}")
 
 else:
     # --- ÉCRAN CONNECTÉ ---
