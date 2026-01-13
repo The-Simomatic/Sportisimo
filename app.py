@@ -19,13 +19,14 @@ if "user" not in st.session_state:
 # --- 2. LOGIQUE D'AUTHENTIFICATION ---
 
 def handle_auth():
+    """Gère la session et les retours de mails de récupération"""
     if "type" in st.query_params and st.query_params["type"] == "recovery":
         st.title("🔄 Nouveau mot de passe")
         new_pass = st.text_input("Entre ton nouveau mot de passe", type="password")
         if st.button("Mettre à jour", use_container_width=True):
             try:
                 supabase.auth.update_user({"password": new_pass})
-                st.success("✅ Mot de passe mis à jour !")
+                st.success("✅ Mot de passe mis à jour ! Connecte-toi.")
                 st.query_params.clear()
                 st.rerun()
             except Exception as e:
@@ -56,14 +57,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def ui_stat_card(label, value):
-    st.markdown(f"""
-        <div style="background: rgba(40,165,168,0.1); border-left: 4px solid #28A5A8; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px;">
-            <div style="font-size: 0.8rem; color: #28A5A8; font-weight: bold;">{label}</div>
-            <div style="font-size: 1.5rem; color: white; font-weight: 700;">{value}</div>
-        </div>
-    """, unsafe_allow_html=True)
-
 # --- 4. INTERFACE ---
 
 if st.session_state.user is None:
@@ -86,126 +79,111 @@ if st.session_state.user is None:
                 except:
                     st.error("Identifiants incorrects ou email non validé.")
             
-            # CORRECTION : Suppression de variant="ghost" pour éviter l'erreur TypeError
             if st.button("Mot de passe oublié ?"):
                 if e_log:
                     try:
                         supabase.auth.reset_password_for_email(e_log)
-                        st.info(f"📩 Lien envoyé à {e_log}")
+                        st.info(f"📩 Lien de récupération envoyé à {e_log}")
                     except Exception as e:
                         st.error(f"Erreur : {e}")
                 else:
-                    st.warning("Saisis ton email ci-dessus.")
+                    st.warning("Saisis ton email ci-dessus pour recevoir le lien.")
 
         with tab_reg:
-            st.write("### Créer ton profil SportiSimo")
+            st.write("### Inscription")
+            # Ordre demandé : Mail, Pass, Prénom, Nom, Date N., Poids, Sport, Niveau
+            new_e = st.text_input("Email d'inscription", key="reg_email").lower().strip()
+            new_p = st.text_input("Mot de passe", type="password", key="reg_pass")
             
-            # Identifiants (Ordre demandé)
-            new_e = st.text_input("Email", key="r_email").lower().strip()
-            new_p = st.text_input("Mot de passe", type="password", key="r_pass")
-            
-            # Organisation en colonnes pour les infos personnelles
             c1, c2 = st.columns(2)
             with c1:
-                prenom_in = st.text_input("Prénom")
-                date_n = c1.date_input(
-                "Date de naissance", 
-                value=None,              # Champ vide par défaut
-                min_value=datetime.date(1920, 1, 1), 
-                max_value=datetime.date.today(),
-                format="DD/MM/YYYY",     # Format français
-                help="Sélectionne ta date de naissance"
+                prenom = st.text_input("Prénom")
+                # Date de naissance améliorée : vide par défaut, plage large
+                date_n = st.date_input(
+                    "Date de naissance", 
+                    value=None, 
+                    min_value=datetime.date(1920, 1, 1),
+                    max_value=datetime.date.today(),
+                    format="DD/MM/YYYY"
                 )
             with c2:
-                nom_in = st.text_input("Nom")
-                poids_in = st.number_input("Poids (kg)", 30, 200, 75)
+                nom = st.text_input("Nom")
+                poids = st.number_input("Poids (kg)", 30, 200, 75)
             
-            # Sport et Niveau
             c3, c4 = st.columns(2)
             with c3:
-                sport_in = st.selectbox("Sport favori", ["Running", "Cyclisme", "Trail", "VTT"])
+                sport = st.selectbox("Sport favori", ["Running", "Cyclisme", "Trail", "VTT"])
             with c4:
-                niveau_in = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Confirmé", "Expert"])
+                niv = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Confirmé", "Expert"])
             
             if st.button("Valider l'inscription", use_container_width=True):
-    # On vérifie que tous les champs sont remplis
-    if not prenom or not nom or not date_n:
-        st.warning("⚠️ Merci de remplir tous les champs, y compris ta date de naissance.")
-    else:
-        try:
-            res = supabase.auth.sign_up({
-                "email": new_e, 
-                "password": new_p,
-                "options": {"data": {
-                    "prenom": prenom, 
-                    "nom": nom, 
-                    "date_n": str(date_n), # Convertit la date en texte pour Supabase
-                    "poids": poids, 
-                    "niveau": niv, 
-                    "sport": sport
-                }}
-            })
-            if res.user:
-                st.success("📩 Mail envoyé ! Active ton compte pour valider ton profil.")
-        except Exception as e:
-            st.error(f"Erreur : {e}")
+                # Validation stricte des champs obligatoires
+                if not new_e or not new_p or not prenom or not nom or date_n is None:
+                    st.warning("⚠️ Merci de remplir tous les champs, y compris ta date de naissance.")
+                else:
+                    try:
+                        res = supabase.auth.sign_up({
+                            "email": new_e, 
+                            "password": new_p,
+                            "options": {"data": {
+                                "prenom": prenom, 
+                                "nom": nom, 
+                                "date_n": str(date_n),
+                                "poids": poids, 
+                                "sport": sport,
+                                "niveau": niv
+                            }}
+                        })
+                        if res.user:
+                            st.success("### 📧 Mail envoyé !")
+                            st.info("Consulte tes mails pour valider ton compte, puis connecte-toi ici.")
+                    except Exception as e:
+                        st.error(f"Erreur : {e}")
 
 else:
-    # --- ÉCRAN CONNECTÉ ---
+    # --- ÉCRAN CONNECTÉ & REMPLISSAGE BASE ---
     user = st.session_state.user
     
-    # 1. RECUPERATION DU PROFIL
-    try:
-        res_p = supabase.table("profiles").select("*").eq("id", user.id).maybe_single().execute()
-        prof = res_p.data
-    except:
-        prof = None
-
-    # 2. CREATION DU PROFIL SI MANQUANT
+    # 1. Vérification si le profil existe déjà
+    res_p = supabase.table("profiles").select("*").eq("id", user.id).maybe_single().execute()
+    prof = res_p.data
+    
+    # 2. Création automatique du profil (First Login)
     if not prof:
         st.balloons()
         meta = user.user_metadata
-        new_prof = {
+        # On fait correspondre EXACTEMENT aux colonnes de ton image 99e082.png
+        new_prof_data = {
             "id": user.id,
             "email": user.email,
             "prenom": meta.get("prenom", "Champion"),
             "nom": meta.get("nom", ""),
-            "poids": meta.get("poids", 75),
-            "sport_pref": meta.get("sport_pref", "Running"),
+            "date_naissance": meta.get("date_n"), # Colonne exacte
+            "poids": float(meta.get("poids", 75)),  # Supabase attend souvent un float
+            "niveau": meta.get("niveau", "Débutant"),
+            "sport_pref": meta.get("sport", "Running"),
             "vma": 16.0,
             "statut": "gratuit"
         }
         try:
-            supabase.table("profiles").insert(new_prof).execute()
-            st.rerun()
+            supabase.table("profiles").insert(new_prof_data).execute()
+            st.success("Profil synchronisé avec succès !")
+            st.rerun() # Recharge pour afficher le dashboard avec les données de 'prof'
         except Exception as e:
-            st.error(f"Erreur base : {e}")
+            st.error(f"Erreur lors de la création du profil : {e}")
             st.stop()
 
-    # 3. AFFICHAGE
+    # 3. Affichage du Dashboard une fois le profil chargé
     with st.sidebar:
-        # Sécurité pour l'affichage du prénom
-        display_name = prof.get('prenom', 'Sportif') if prof else "Sportif"
-        st.markdown(f"## Salut {display_name} ! 👋")
+        st.markdown(f"## Salut {prof.get('prenom', 'Sportif')} ! 👋")
         if st.button("Se déconnecter", use_container_width=True):
             logout_user()
         st.divider()
-        menu = st.radio("Menu", ["🏃 Dashboard", "⚙️ Paramètres"])
+        st.write(f"Niveau : **{prof.get('niveau')}**")
 
-    if menu == "🏃 Dashboard":
-        st.title("🏃 Mes Allures")
-        vma = prof.get('vma', 16.0)
-        c1, c2, c3 = st.columns(3)
-        with c1: ui_stat_card("Endurance (70%)", f"{int(3600/(vma*0.7)//60)}:{int(3600/(vma*0.7)%60):02d} /km")
-        with c2: ui_stat_card("Seuil (85%)", f"{int(3600/(vma*0.85)//60)}:{int(3600/(vma*0.85)%60):02d} /km")
-        with c3: ui_stat_card("VMA (100%)", f"{int(3600/vma//60)}:{int(3600/vma%60):02d} /km")
-
-    elif menu == "⚙️ Paramètres":
-        st.title("⚙️ Réglages")
-        with st.form("edit_p"):
-            v_input = st.slider("VMA (km/h)", 8.0, 22.0, float(prof.get('vma', 16.0)))
-            p_input = st.number_input("Poids (kg)", 30, 200, int(prof.get('poids', 75)))
-            if st.form_submit_button("Sauvegarder"):
-                supabase.table("profiles").update({"vma": v_input, "poids": p_input}).eq("id", user.id).execute()
-                st.success("Mis à jour !")
-                st.rerun()
+    st.title("🏃 Mon Dashboard Sportif")
+    st.write(f"Bienvenue sur ton espace personnalisé, {prof.get('prenom')}.")
+    
+    # Exemple de calcul d'allure basé sur la VMA par défaut (16.0)
+    vma = prof.get('vma', 16.0)
+    st.metric("VMA Actuelle", f"{vma} km/h")
