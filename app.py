@@ -15,7 +15,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# --- 2. GESTION DE L'AUTH ---
+# --- 2. LOGIQUE D'AUTHENTIFICATION ---
 def handle_auth():
     try:
         res = supabase.auth.get_session()
@@ -26,7 +26,7 @@ def handle_auth():
 
 handle_auth()
 
-# --- 3. INTERFACE DE CONNEXION ---
+# --- 3. INTERFACE ---
 if st.session_state.user is None:
     st.markdown("<h1 style='text-align:center;'>SportiSimo</h1>", unsafe_allow_html=True)
     tab_log, tab_reg = st.tabs(["Connexion", "Créer un compte"])
@@ -40,8 +40,8 @@ if st.session_state.user is None:
                 if res.user:
                     st.session_state.user = res.user
                     st.rerun()
-            except Exception:
-                st.error("Accès refusé. Vérifie tes identifiants ou valide ton e-mail.")
+            except:
+                st.error("Identifiants incorrects ou email non validé.")
 
     with tab_reg:
         st.write("### Inscription")
@@ -50,76 +50,71 @@ if st.session_state.user is None:
         
         c1, c2 = st.columns(2)
         with c1:
-            prenom_in = st.text_input("Prénom")
-            date_n_in = st.date_input("Date de naissance", value=None, min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today(), format="DD/MM/YYYY")
+            prenom = st.text_input("Prénom")
+            # Correction alignement et date vide par défaut
+            date_n = st.date_input("Date de naissance", value=None, min_value=datetime.date(1920, 1, 1))
         with c2:
-            nom_in = st.text_input("Nom")
-            poids_in = st.number_input("Poids (kg)", 30.0, 200.0, 75.0)
+            nom = st.text_input("Nom")
+            poids = st.number_input("Poids (kg)", 30.0, 200.0, 75.0)
         
-        sport_in = st.selectbox("Sport favori", ["Running", "Cyclisme", "Trail"])
-        niv_in = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Confirmé", "Expert"])
-        
+        sport = st.selectbox("Sport", ["Running", "Cyclisme", "Trail"])
+        niv = st.selectbox("Niveau", ["Débutant", "Intermédiaire", "Confirmé", "Expert"])
+
+        # ALIGNEMENT CORRECT (Correction Image 9a582d)
         if st.button("Valider l'inscription", use_container_width=True):
-            if not prenom_in or not nom_in or date_n_in is None:
-                st.warning("⚠️ Complète tous les champs.")
+            if not prenom or not nom or date_n is None:
+                st.warning("⚠️ Remplis tous les champs !")
             else:
                 try:
-                    # On stocke tout dans les métadonnées pour plus tard
+                    # Inscription simple (On ne touche pas à la base ici)
                     supabase.auth.sign_up({
-                        "email": new_e, 
-                        "password": new_p,
+                        "email": new_e, "password": new_p,
                         "options": {"data": {
-                            "prenom": prenom_in, "nom": nom_in, "date_n": str(date_n_in),
-                            "poids": poids_in, "sport": sport_in, "niveau": niv_in
+                            "prenom": prenom, "nom": nom, "date_n": str(date_n),
+                            "poids": poids, "sport": sport, "niveau": niv
                         }}
                     })
-                    st.success("📩 E-mail envoyé ! Valide ton compte pour activer ton profil.")
+                    st.success("📩 Mail envoyé ! Valide-le avant de te connecter.")
                 except Exception as e:
                     st.error(f"Erreur : {e}")
 
-# --- 4. ÉCRAN CONNECTÉ ---
 else:
+    # --- 4. ÉCRAN CONNECTÉ (AUTHENTIFIED) ---
     user = st.session_state.user
     
-    # Sécurité pour éviter l'AttributeError (Image 9ac8e9)
+    # Sécurité pour éviter AttributeError (Image 9ac8e9)
     prof = None
     try:
         res_p = supabase.table("profiles").select("*").eq("id", user.id).maybe_single().execute()
         if res_p:
             prof = res_p.data
-    except Exception as e:
-        st.warning("Initialisation de ton profil...")
+    except:
+        pass
 
-    # Si le profil est vide (Base vide), on le crée
+    # Si profil inexistant dans la base (Image 99e082)
     if not prof:
         meta = user.user_metadata
-        new_data = {
+        new_prof = {
             "id": user.id,
             "email": user.email,
             "prenom": meta.get("prenom", "Champion"),
             "nom": meta.get("nom", ""),
-            "date_naissance": meta.get("date_n"), # Image 99e082
+            "date_naissance": meta.get("date_n"), # Colonne Image 99e082
             "poids": float(meta.get("poids", 75.0)),
             "niveau": meta.get("niveau", "Débutant"),
             "sport_pref": meta.get("sport", "Running"),
-            "vma": 16.0,
-            "statut": "gratuit"
+            "vma": 16.0
         }
         try:
-            supabase.table("profiles").insert(new_data).execute()
-            st.balloons()
+            # ICI l'utilisateur est connecté, la RLS "authenticated" l'autorise
+            supabase.table("profiles").insert(new_prof).execute()
             st.rerun()
         except Exception as e:
             st.error(f"Erreur d'écriture : {e}")
-            st.info("Vérifie tes RLS Policies (Insert doit être sur TRUE).")
             st.stop()
 
-    # Dashboard final
-    st.sidebar.title(f"Salut {prof['prenom']} !")
-    if st.sidebar.button("Déconnexion"):
+    st.title(f"Salut {prof.get('prenom')} ! 👋")
+    if st.button("Déconnexion"):
         supabase.auth.sign_out()
         st.session_state.user = None
         st.rerun()
-    
-    st.title("🏃 SportiSimo")
-    st.write(f"Ton profil est prêt et ta base de données est remplie !")
